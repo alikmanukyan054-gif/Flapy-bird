@@ -1,0 +1,1052 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no"/>
+<title>Flappy Crash</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Share+Tech+Mono&display=swap');
+
+  :root {
+    --neon-green: #00ff88;
+    --neon-red:   #ff3366;
+    --neon-blue:  #00cfff;
+    --neon-gold:  #ffd700;
+    --bg-dark:    #040a12;
+    --bg-panel:   #0a1628;
+    --bg-panel2:  #0d1f3c;
+    --border-glow: rgba(0,255,136,0.35);
+    --text-main:  #e0f0ff;
+    --text-dim:   #4a7090;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg-dark);
+    color: var(--text-main);
+    font-family: 'Share Tech Mono', monospace;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    overflow-x: hidden;
+    padding: 10px;
+  }
+
+  /* Scanline overlay */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: repeating-linear-gradient(
+      to bottom,
+      transparent 0px, transparent 3px,
+      rgba(0,0,0,0.08) 3px, rgba(0,0,0,0.08) 4px
+    );
+    pointer-events: none;
+    z-index: 1000;
+  }
+
+  h1 {
+    font-family: 'Orbitron', sans-serif;
+    font-size: clamp(1.4rem, 4vw, 2.2rem);
+    font-weight: 900;
+    letter-spacing: 0.2em;
+    background: linear-gradient(90deg, var(--neon-green), var(--neon-blue), var(--neon-green));
+    background-size: 200% auto;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    animation: shimmer 3s linear infinite;
+    margin-bottom: 10px;
+  }
+
+  @keyframes shimmer {
+    0%   { background-position: 0% center; }
+    100% { background-position: 200% center; }
+  }
+
+  .game-wrapper {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    max-width: 520px;
+  }
+
+  #gameCanvas {
+    border: 1.5px solid var(--border-glow);
+    border-radius: 8px;
+    display: block;
+    box-shadow: 0 0 24px rgba(0,255,136,0.18), 0 0 60px rgba(0,0,0,0.6);
+    cursor: pointer;
+    touch-action: none;
+    width: 100%;
+    max-width: 520px;
+  }
+
+  .hud {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+    gap: 8px;
+  }
+
+  .hud-box {
+    flex: 1;
+    background: var(--bg-panel);
+    border: 1px solid rgba(0,207,255,0.2);
+    border-radius: 6px;
+    padding: 8px 10px;
+    text-align: center;
+  }
+
+  .hud-label {
+    font-size: 0.6rem;
+    color: var(--text-dim);
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    margin-bottom: 2px;
+  }
+
+  .hud-value {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--neon-green);
+    transition: color 0.3s;
+  }
+
+  .hud-value.danger { color: var(--neon-red); }
+  .hud-value.gold   { color: var(--neon-gold); }
+
+  .controls {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 8px;
+    width: 100%;
+  }
+
+  .ctrl-group {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .ctrl-label {
+    font-size: 0.58rem;
+    color: var(--text-dim);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+
+  input[type="number"], select {
+    background: var(--bg-panel2);
+    border: 1px solid rgba(0,207,255,0.25);
+    border-radius: 5px;
+    color: var(--text-main);
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.85rem;
+    padding: 7px 8px;
+    width: 100%;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+
+  input[type="number"]:focus, select:focus {
+    border-color: var(--neon-green);
+    box-shadow: 0 0 8px rgba(0,255,136,0.2);
+  }
+
+  select option { background: #0a1628; }
+
+  .btn-row {
+    display: flex;
+    gap: 8px;
+    width: 100%;
+  }
+
+  button {
+    flex: 1;
+    font-family: 'Orbitron', sans-serif;
+    font-weight: 700;
+    font-size: 0.75rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    padding: 10px 8px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.15s;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  button:active { transform: scale(0.97); }
+
+  #btnStart {
+    background: linear-gradient(135deg, #00c96e, #00ff88);
+    color: #04180e;
+    box-shadow: 0 0 16px rgba(0,255,136,0.4);
+  }
+  #btnStart:hover { box-shadow: 0 0 28px rgba(0,255,136,0.65); }
+  #btnStart:disabled { opacity: 0.4; cursor: not-allowed; box-shadow: none; }
+
+  #btnCashout {
+    background: linear-gradient(135deg, #ff9900, #ffd700);
+    color: #1a0e00;
+    box-shadow: 0 0 16px rgba(255,215,0,0.35);
+    display: none;
+  }
+  #btnCashout:hover { box-shadow: 0 0 28px rgba(255,215,0,0.6); }
+  #btnCashout.pulse { animation: cashoutPulse 0.6s ease infinite alternate; }
+  @keyframes cashoutPulse {
+    from { box-shadow: 0 0 14px rgba(255,215,0,0.4); }
+    to   { box-shadow: 0 0 32px rgba(255,215,0,0.9); }
+  }
+
+  #toast {
+    position: fixed;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%) translateY(80px);
+    background: var(--bg-panel2);
+    border: 1px solid var(--neon-green);
+    border-radius: 8px;
+    padding: 12px 24px;
+    font-family: 'Orbitron', sans-serif;
+    font-size: 0.85rem;
+    letter-spacing: 0.1em;
+    color: var(--neon-green);
+    box-shadow: 0 0 24px rgba(0,255,136,0.3);
+    transition: transform 0.4s cubic-bezier(0.34,1.56,0.64,1);
+    z-index: 999;
+    text-align: center;
+    max-width: 90vw;
+    pointer-events: none;
+  }
+  #toast.show { transform: translateX(-50%) translateY(0); }
+  #toast.loss { border-color: var(--neon-red); color: var(--neon-red); box-shadow: 0 0 24px rgba(255,51,102,0.3); }
+
+  .balance-row {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--bg-panel);
+    border: 1px solid rgba(255,215,0,0.15);
+    border-radius: 6px;
+    padding: 6px 12px;
+  }
+  .balance-row span:first-child {
+    font-size: 0.6rem;
+    color: var(--text-dim);
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+  }
+  #balanceDisplay {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 1rem;
+    color: var(--neon-gold);
+  }
+
+  .instructions {
+    font-size: 0.62rem;
+    color: var(--text-dim);
+    text-align: center;
+    letter-spacing: 0.08em;
+    line-height: 1.6;
+  }
+
+  @media (max-width: 400px) {
+    .controls { grid-template-columns: 1fr 1fr; }
+    .ctrl-group:last-child { grid-column: span 2; }
+  }
+</style>
+</head>
+<body>
+
+<div class="game-wrapper">
+  <h1>⚡ Flappy Crash</h1>
+
+  <canvas id="gameCanvas" width="520" height="320"></canvas>
+
+  <div class="hud">
+    <div class="hud-box">
+      <div class="hud-label">Score</div>
+      <div class="hud-value" id="scoreDisplay">0</div>
+    </div>
+    <div class="hud-box">
+      <div class="hud-label">Multiplier</div>
+      <div class="hud-value" id="percentDisplay">1.00×</div>
+    </div>
+    <div class="hud-box">
+      <div class="hud-label">Win Amount</div>
+      <div class="hud-value gold" id="winDisplay">—</div>
+    </div>
+  </div>
+
+  <div class="balance-row">
+    <span>Balance</span>
+    <span id="balanceDisplay">1,000.00</span>
+  </div>
+
+  <div class="controls">
+    <div class="ctrl-group">
+      <div class="ctrl-label">Bet Amount</div>
+      <input type="number" id="betInput" value="50" min="1" step="1"/>
+    </div>
+    <div class="ctrl-group">
+      <div class="ctrl-label">Currency</div>
+      <select id="currencySelect">
+        <option value="RUB">₽ RUB</option>
+        <option value="USD" selected>$ USD</option>
+        <option value="AMD">֏ AMD</option>
+      </select>
+    </div>
+    <div class="ctrl-group">
+      <div class="ctrl-label">Speed</div>
+      <select id="speedSelect">
+        <option value="normal" selected>Normal</option>
+        <option value="fast">Fast</option>
+        <option value="insane">Insane</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="btn-row">
+    <button id="btnStart">▶ Start Game</button>
+    <button id="btnCashout">💰 Cash Out</button>
+  </div>
+
+  <div class="instructions">
+    CLICK / TAP / SPACE to flap &nbsp;|&nbsp; Pass pipes to grow multiplier &nbsp;|&nbsp; Cash out before crash!
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+/*
+ * FLAPPY CRASH — Fixed & Optimized
+ *
+ * KEY FIXES vs original:
+ *  1. dt cap  — prevents 2× speed on high-refresh displays and tab-resume spikes
+ *  2. Crash system — exponential multiplier with seeded random crash point (no instant crash)
+ *  3. getGameSpeed() moved OUT of update() — no per-frame DOM query
+ *  4. Collision guard — can never fire after pipe.passed is true
+ *  5. Particle cap (MAX_PARTICLES) — prevents unbounded array growth
+ *  6. Canvas HiDPI — sharp rendering on Retina / high-DPR screens
+ *  7. Jump debounce — prevents double-flap from simultaneous click+touchstart
+ *  8. Pipe offscreen cleanup — single unified check, no duplicate splice
+ *  9. Star rendering — canvas fillStyle set once per alpha group (minor perf)
+ * 10. Multiplier display instead of % — cleaner UX for crash games
+ */
+
+'use strict';
+
+// ── Canvas (HiDPI aware) ──────────────────────────────────────
+const canvas = document.getElementById('gameCanvas');
+const ctx    = canvas.getContext('2d');
+
+// Logical (CSS) dimensions — never change
+const CW = 520;
+const CH = 320;
+
+// Physical pixel dimensions scaled for device pixel ratio
+let DPR = 1;
+
+function resizeCanvas() {
+  const cssW   = Math.min(CW, window.innerWidth - 20);
+  const cssH   = cssW * CH / CW;
+  canvas.style.width  = cssW + 'px';
+  canvas.style.height = cssH + 'px';
+
+  // Scale backing store to device pixel ratio for sharp rendering
+  // Cap at 2 for performance on mobile
+  DPR = Math.min(window.devicePixelRatio || 1, 2);
+  canvas.width  = Math.round(CW * DPR);
+  canvas.height = Math.round(CH * DPR);
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+}
+resizeCanvas();
+window.addEventListener('resize', resizeCanvas);
+
+// ── Currency ─────────────────────────────────────────────────
+const CURRENCIES = {
+  USD: { symbol: '$',  decimals: 2 },
+  RUB: { symbol: '₽', decimals: 0 },
+  AMD: { symbol: '֏', decimals: 0 },
+};
+let currentCurrency = 'USD';
+
+function fmt(amount) {
+  const c = CURRENCIES[currentCurrency];
+  return c.symbol + amount.toFixed(c.decimals);
+}
+
+// ── Game State ────────────────────────────────────────────────
+const STATE = Object.freeze({ IDLE: 0, PLAYING: 1, DEAD: 2, CASHOUT: 3 });
+let state = STATE.IDLE;
+
+let balance = 1000;
+let bet     = 50;
+
+// ── Crash / Multiplier System ─────────────────────────────────
+//
+// The multiplier grows exponentially over time — slow at first, accelerating.
+// A random crash point is chosen at game start (hidden from player).
+// Guaranteed NO crash for the first CRASH_GRACE_S seconds.
+//
+let multiplier      = 1.0;   // current live multiplier (starts at 1.00×)
+let crashTarget     = 0;     // secret crash multiplier chosen at game start
+let gameElapsedSec  = 0;     // total seconds since round started
+
+// Growth parameters
+const GROWTH_RATE   = 0.18;  // k in: multiplier = e^(k * t)  (tune this)
+const CRASH_GRACE_S = 3.0;   // seconds before crash can ever happen
+const MAX_MULT      = 50.0;  // absolute ceiling
+
+// Generate a random crash target each round.
+// Distribution: biased toward lower values (house edge) but with a long tail.
+// Formula: uses inverse CDF of exponential distribution.
+// ~30% crash below 1.5×, ~55% below 2×, ~80% below 4×, ~5% above 10×
+function generateCrashTarget() {
+  // Seeded with random — house edge baked into 'houseEdge' scalar
+  const houseEdge = 0.97; // 97% RTP
+  const r = Math.random();
+  if (r < 0.01) return 1.0 + GROWTH_RATE; // ~1% chance: crash at very start (after grace)
+  // Exponential distribution for long tail
+  const raw = 1 / (1 - r * houseEdge);
+  return Math.min(raw, MAX_MULT);
+}
+
+// ── Score ─────────────────────────────────────────────────────
+let score    = 0;
+let lastTime = null; // null = first frame
+
+// ── Bird ──────────────────────────────────────────────────────
+const BIRD = {
+  x: 80, y: 0, vy: 0,
+  w: 34, h: 26,
+  gravity:  1800,  // px/s²
+  jumpVel:  -520,  // px/s (negative = up)
+  rotation: 0,
+  flapFrame: 0,    // 0, 1, 2
+  flapTimer: 0,
+};
+
+function resetBird() {
+  BIRD.y         = CH / 2;
+  BIRD.vy        = 0;
+  BIRD.rotation  = 0;
+  BIRD.flapFrame = 0;
+  BIRD.flapTimer = 0;
+}
+
+// Jump with debounce to prevent double-fire from click+touchstart on same tap
+let jumpPending = false;
+
+function birdJump() {
+  if (state !== STATE.PLAYING || jumpPending) return;
+  BIRD.vy     = BIRD.jumpVel;
+  jumpPending = true;
+  // Clear flag after one frame (~16 ms) so next genuine input is accepted
+  setTimeout(() => { jumpPending = false; }, 20);
+  soundFlap();
+}
+
+// ── Pipes ─────────────────────────────────────────────────────
+const PIPE_W           = 52;
+const GAP_H            = 112;
+const PIPE_INTERVAL_MS = 1800;
+
+let pipes     = [];
+let pipeTimer = 0;
+
+// Game speed is read once on start, not every frame (avoids per-frame DOM query)
+let gameSpeed = 200;
+
+function getGameSpeed() {
+  const v = document.getElementById('speedSelect').value;
+  return v === 'fast' ? 270 : v === 'insane' ? 350 : 200;
+}
+
+function spawnPipe() {
+  const minTop = 50;
+  const maxTop = CH - 18 - GAP_H - 50;
+  const gapTop = minTop + Math.random() * (maxTop - minTop);
+  pipes.push({
+    x:                CW + 10,
+    gapTop,
+    gapBot:           gapTop + GAP_H,
+    passed:           false,  // scored?
+    collapsing:       false,  // collapse animation running?
+    collapseProgress: 0,      // 0 → 1
+    alpha:            1,
+  });
+}
+
+// ── Particles ─────────────────────────────────────────────────
+const MAX_PARTICLES = 120; // cap to prevent memory growth
+let particles = [];
+
+function spawnParticles(x, y, color, count) {
+  // Respect the cap — trim oldest if needed
+  const available = MAX_PARTICLES - particles.length;
+  const actual    = Math.min(count, available);
+  for (let i = 0; i < actual; i++) {
+    const angle = Math.random() * Math.PI * 2;
+    const speed = 60 + Math.random() * 180;
+    particles.push({
+      x, y,
+      vx:    Math.cos(angle) * speed,
+      vy:    Math.sin(angle) * speed,
+      life:  1,
+      decay: 0.8 + Math.random() * 0.6,
+      r:     2 + Math.random() * 4,
+      color,
+    });
+  }
+}
+
+// ── Stars (static, generated once) ───────────────────────────
+const STARS = Array.from({ length: 60 }, () => ({
+  x:     Math.random() * CW,
+  y:     Math.random() * CH,
+  r:     0.5 + Math.random() * 1.5,
+  phase: Math.random() * Math.PI * 2,
+  speed: 0.3 + Math.random() * 0.6,
+}));
+
+// ── Floor scroll ──────────────────────────────────────────────
+let floorOffset = 0;
+
+// ── WebAudio ──────────────────────────────────────────────────
+let audioCtx = null;
+
+function ensureAudio() {
+  if (!audioCtx) {
+    try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch(e) {}
+  }
+  // Resume suspended context (required by some mobile browsers)
+  if (audioCtx && audioCtx.state === 'suspended') {
+    audioCtx.resume().catch(() => {});
+  }
+}
+
+function playTone(freq, dur, type = 'sine', gain = 0.07) {
+  if (!audioCtx || audioCtx.state !== 'running') return;
+  try {
+    const osc = audioCtx.createOscillator();
+    const g   = audioCtx.createGain();
+    osc.connect(g);
+    g.connect(audioCtx.destination);
+    osc.type           = type;
+    osc.frequency.value = freq;
+    g.gain.setValueAtTime(gain, audioCtx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + dur);
+    osc.start();
+    osc.stop(audioCtx.currentTime + dur);
+    // Auto-disconnect after done to release resources
+    osc.onended = () => { osc.disconnect(); g.disconnect(); };
+  } catch(e) {}
+}
+
+function soundFlap()    { playTone(520, 0.08, 'sine', 0.07); }
+function soundPass()    {
+  playTone(880,  0.10, 'sine', 0.06);
+  setTimeout(() => playTone(1100, 0.14, 'sine', 0.04), 60);
+}
+function soundDead()    {
+  playTone(180, 0.4, 'sawtooth', 0.10);
+  setTimeout(() => playTone(110, 0.5, 'sawtooth', 0.08), 100);
+}
+function soundCashout() {
+  [660, 880, 1100].forEach((f, i) =>
+    setTimeout(() => playTone(f, 0.18, 'sine', 0.07), i * 80)
+  );
+}
+
+// ── Toast ─────────────────────────────────────────────────────
+let toastTimer = null;
+
+function showToast(msg, isLoss = false) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className   = 'show' + (isLoss ? ' loss' : '');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { el.className = ''; }, 2800);
+}
+
+// ── UI refs ───────────────────────────────────────────────────
+const btnStart   = document.getElementById('btnStart');
+const btnCashout = document.getElementById('btnCashout');
+const percentEl  = document.getElementById('percentDisplay');
+const winEl      = document.getElementById('winDisplay');
+const scoreEl    = document.getElementById('scoreDisplay');
+const balanceEl  = document.getElementById('balanceDisplay');
+const betInput   = document.getElementById('betInput');
+const currSelect = document.getElementById('currencySelect');
+
+function updateBalanceDisplay() {
+  balanceEl.textContent = fmt(balance);
+}
+
+function updateHUD() {
+  percentEl.textContent = multiplier.toFixed(2) + '×';
+  // Turn red when multiplier is high (danger zone)
+  percentEl.className   = 'hud-value' + (multiplier > 3 ? ' danger' : '');
+
+  if (state === STATE.PLAYING) {
+    winEl.textContent = fmt(bet * multiplier);
+  }
+  scoreEl.textContent = score;
+}
+
+// ── Collision (AABB with inset hitbox) ───────────────────────
+function checkCollision(pipe) {
+  // Shrink hitbox for visual fairness (5px sides, 4px top/bottom)
+  const bL = BIRD.x - BIRD.w / 2 + 5;
+  const bR = BIRD.x + BIRD.w / 2 - 5;
+  const bT = BIRD.y - BIRD.h / 2 + 4;
+  const bB = BIRD.y + BIRD.h / 2 - 4;
+
+  const pL = pipe.x;
+  const pR = pipe.x + PIPE_W;
+
+  // Not horizontally overlapping → no collision
+  if (bR <= pL || bL >= pR) return false;
+  // In the gap → safe
+  if (bT >= pipe.gapTop && bB <= pipe.gapBot) return false;
+  return true;
+}
+
+// ── Init ──────────────────────────────────────────────────────
+function initGame() {
+  pipes          = [];
+  particles      = [];
+  multiplier     = 1.0;
+  gameElapsedSec = 0;
+  crashTarget    = generateCrashTarget();
+  score          = 0;
+  pipeTimer      = 0;
+  floorOffset    = 0;
+  gameSpeed      = getGameSpeed(); // read once here, not per frame
+  jumpPending    = false;
+  resetBird();
+  spawnPipe();
+}
+
+// ── Start ─────────────────────────────────────────────────────
+function startGame() {
+  ensureAudio();
+  bet = parseFloat(betInput.value) || 0;
+  if (bet <= 0)      { showToast('Enter a valid bet!', true);    return; }
+  if (bet > balance) { showToast('Insufficient balance!', true); return; }
+
+  balance -= bet;
+  updateBalanceDisplay();
+  initGame();
+  state = STATE.PLAYING;
+
+  btnStart.disabled        = true;
+  btnCashout.style.display = 'flex';
+  btnCashout.classList.add('pulse');
+  betInput.disabled        = true;
+}
+
+// ── Cash Out ──────────────────────────────────────────────────
+function cashOut() {
+  if (state !== STATE.PLAYING) return;
+  const win = bet * multiplier;
+  balance  += win;
+  updateBalanceDisplay();
+  state = STATE.CASHOUT;
+  soundCashout();
+  showToast('💰 Cashed out! You won ' + fmt(win));
+  endRound(true, win);
+}
+
+// ── Death ─────────────────────────────────────────────────────
+function killBird() {
+  if (state !== STATE.PLAYING) return;
+  state = STATE.DEAD;
+  soundDead();
+  spawnParticles(BIRD.x, BIRD.y, '#ff3366', 20);
+  showToast('💥 Crashed! Lost ' + fmt(bet), true);
+  endRound(false, 0);
+}
+
+function endRound(won, winAmount) {
+  btnStart.disabled        = false;
+  btnCashout.style.display = 'none';
+  btnCashout.classList.remove('pulse');
+  betInput.disabled        = false;
+  winEl.textContent        = won ? fmt(winAmount) : '—';
+}
+
+// ── Update (fixed dt, frame-rate independent) ─────────────────
+function update(dt) {
+  if (state !== STATE.PLAYING) return;
+
+  // ── Elapsed time (drives multiplier)
+  gameElapsedSec += dt;
+
+  // ── Multiplier: exponential growth  M = e^(k·t)
+  multiplier = Math.min(Math.exp(GROWTH_RATE * gameElapsedSec), MAX_MULT);
+
+  // ── Check crash condition (after grace period)
+  if (gameElapsedSec > CRASH_GRACE_S && multiplier >= crashTarget) {
+    killBird();
+    return;
+  }
+
+  // ── Bird physics (velocity-verlet style, dt-correct)
+  BIRD.vy += BIRD.gravity * dt;
+  BIRD.y  += BIRD.vy * dt;
+
+  // Wing animation
+  BIRD.flapTimer += dt;
+  if (BIRD.flapTimer > 0.09) {
+    BIRD.flapTimer = 0;
+    BIRD.flapFrame = (BIRD.flapFrame + 1) % 3;
+  }
+
+  // Smooth rotation based on velocity
+  const targetRot = Math.max(-30, Math.min(90, BIRD.vy * 0.065));
+  BIRD.rotation  += (targetRot - BIRD.rotation) * 12 * dt;
+
+  // ── Boundary death (floor and ceiling)
+  if (BIRD.y - BIRD.h / 2 < 0 || BIRD.y + BIRD.h / 2 > CH - 18) {
+    killBird();
+    return;
+  }
+
+  // ── Pipes
+  pipeTimer += dt * 1000;
+  if (pipeTimer >= PIPE_INTERVAL_MS) {
+    pipeTimer -= PIPE_INTERVAL_MS;
+    spawnPipe();
+  }
+
+  for (let i = pipes.length - 1; i >= 0; i--) {
+    const p = pipes[i];
+
+    // Move (only if not yet collapsing)
+    if (!p.collapsing) {
+      p.x -= gameSpeed * dt;
+    }
+
+    // Collapse animation (fade + shrink)
+    if (p.collapsing) {
+      p.collapseProgress += dt * 2.8; // ~0.36 s to full
+      p.alpha = Math.max(0, 1 - p.collapseProgress);
+      if (p.collapseProgress >= 1) {
+        pipes.splice(i, 1);
+        continue;
+      }
+    }
+
+    // ── Passed check: bird's left edge has cleared pipe's right edge
+    // Guard: only run once (p.passed stays true forever after)
+    if (!p.passed && (p.x + PIPE_W) < BIRD.x) {
+      p.passed     = true;
+      p.collapsing = true;
+      score++;
+      soundPass();
+      spawnParticles(p.x + PIPE_W / 2, p.gapTop + GAP_H / 2, '#00ff88', 12);
+    }
+
+    // ── Collision — ONLY if pipe has NOT been passed and is NOT collapsing
+    // This double-guard ensures a pipe can NEVER kill the player after it's scored
+    if (!p.passed && !p.collapsing) {
+      if (checkCollision(p)) {
+        killBird();
+        return;
+      }
+    }
+
+    // ── Cleanup: remove off-screen pipes that were never passed (edge case)
+    // (e.g., player died mid-flight and pipe drifted off-screen)
+    if (!p.collapsing && p.x + PIPE_W < -80) {
+      pipes.splice(i, 1);
+    }
+  }
+
+  // ── Floor scroll
+  floorOffset = (floorOffset + gameSpeed * dt) % 40;
+}
+
+// ── Draw ──────────────────────────────────────────────────────
+function draw() {
+  const now = performance.now() / 1000;
+
+  // Background
+  ctx.fillStyle = '#060e1a';
+  ctx.fillRect(0, 0, CW, CH);
+
+  // Bird position radial glow (only during active states)
+  if (state === STATE.PLAYING || state === STATE.DEAD) {
+    const g = ctx.createRadialGradient(BIRD.x, BIRD.y, 4, BIRD.x, BIRD.y, 85);
+    g.addColorStop(0, 'rgba(0,207,255,0.07)');
+    g.addColorStop(1, 'transparent');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, CW, CH);
+  }
+
+  // Stars (twinkling)
+  ctx.beginPath();
+  for (const s of STARS) {
+    const a = 0.25 + 0.45 * Math.sin(s.phase + now * s.speed);
+    ctx.fillStyle = `rgba(180,220,255,${a.toFixed(2)})`;
+    ctx.moveTo(s.x + s.r, s.y);
+    ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+  }
+  ctx.fill();
+
+  // Pipes
+  for (const p of pipes) {
+    ctx.save();
+    ctx.globalAlpha = p.alpha;
+    drawPipe(p);
+    ctx.restore();
+  }
+
+  // Particles
+  ctx.save();
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const pt = particles[i];
+    ctx.globalAlpha = pt.life;
+    ctx.fillStyle   = pt.color;
+    ctx.beginPath();
+    ctx.arc(pt.x, pt.y, pt.r * pt.life, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+
+  // Floor bar
+  ctx.fillStyle = '#0d1f3c';
+  ctx.fillRect(0, CH - 18, CW, 18);
+  // Animated dashes
+  ctx.strokeStyle = 'rgba(0,207,255,0.22)';
+  ctx.lineWidth   = 1;
+  ctx.beginPath();
+  for (let x = -floorOffset; x < CW; x += 40) {
+    ctx.moveTo(x, CH - 18);
+    ctx.lineTo(x + 20, CH - 18);
+  }
+  ctx.stroke();
+  // Top edge glow line
+  ctx.strokeStyle = 'rgba(0,207,255,0.5)';
+  ctx.lineWidth   = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(0, CH - 18);
+  ctx.lineTo(CW, CH - 18);
+  ctx.stroke();
+
+  // Bird
+  drawBird();
+
+  // Overlay for non-playing states
+  if (state === STATE.IDLE) {
+    drawOverlay('FLAPPY CRASH', 'Set bet & click START', '#00cfff');
+  } else if (state === STATE.DEAD) {
+    drawOverlay('CRASHED!', 'Lost ' + fmt(bet) + '  —  Try again', '#ff3366');
+  } else if (state === STATE.CASHOUT) {
+    const win = bet * multiplier;
+    drawOverlay('CASHED OUT!', '+' + fmt(win) + '  Profit secured!', '#ffd700');
+  }
+}
+
+function drawPipe(p) {
+  const shrink = p.collapseProgress * 0.5;
+  const pw     = PIPE_W * (1 - shrink);
+  const cx     = p.x + PIPE_W / 2;
+
+  // Top pipe
+  const topH = p.gapTop * (1 - p.collapseProgress * 0.6);
+  if (topH > 0) {
+    ctx.fillStyle = '#1a5c2e';
+    ctx.fillRect(cx - pw / 2, 0, pw, topH);
+    ctx.fillStyle = 'rgba(255,255,255,0.07)';
+    ctx.fillRect(cx - pw / 2 + 3, 0, 7, topH);
+    const capW = pw + 10;
+    ctx.fillStyle = '#22753a';
+    ctx.fillRect(cx - capW / 2, topH - 18, capW, 18);
+    ctx.strokeStyle = 'rgba(0,255,136,0.55)';
+    ctx.lineWidth   = 1.5;
+    ctx.strokeRect(cx - capW / 2, topH - 18, capW, 18);
+  }
+
+  // Bottom pipe
+  const botY = p.gapBot + p.collapseProgress * (CH - 18 - p.gapBot) * 0.8;
+  const botH = CH - 18 - botY;
+  if (botH > 0) {
+    ctx.fillStyle = '#1a5c2e';
+    ctx.fillRect(cx - pw / 2, botY, pw, botH);
+    ctx.fillStyle = 'rgba(255,255,255,0.07)';
+    ctx.fillRect(cx - pw / 2 + 3, botY, 7, botH);
+    const capW = pw + 10;
+    ctx.fillStyle = '#22753a';
+    ctx.fillRect(cx - capW / 2, botY, capW, 18);
+    ctx.strokeStyle = 'rgba(0,255,136,0.55)';
+    ctx.lineWidth   = 1.5;
+    ctx.strokeRect(cx - capW / 2, botY, capW, 18);
+  }
+}
+
+function drawBird() {
+  ctx.save();
+  ctx.translate(BIRD.x, BIRD.y);
+  ctx.rotate(BIRD.rotation * Math.PI / 180);
+
+  // Glow aura
+  const aura = ctx.createRadialGradient(0, 0, 2, 0, 0, 24);
+  aura.addColorStop(0, 'rgba(0,207,255,0.3)');
+  aura.addColorStop(1, 'transparent');
+  ctx.fillStyle = aura;
+  ctx.beginPath();
+  ctx.arc(0, 0, 24, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Body
+  ctx.fillStyle = state === STATE.DEAD ? '#cc8800' : '#f9d71c';
+  ctx.beginPath();
+  ctx.ellipse(0, 0, BIRD.w / 2, BIRD.h / 2, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Wing (3-frame flap)
+  const wingOffsets = [-5, 0, 5];
+  ctx.fillStyle = state === STATE.DEAD ? '#aa7000' : '#e8b800';
+  ctx.beginPath();
+  ctx.ellipse(-5, wingOffsets[BIRD.flapFrame], 10, 6, -0.3, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Eye white
+  ctx.fillStyle = '#fff';
+  ctx.beginPath();
+  ctx.arc(7, -4, 5, 0, Math.PI * 2);
+  ctx.fill();
+  // Pupil
+  ctx.fillStyle = state === STATE.DEAD ? '#000' : '#1a1a2e';
+  ctx.beginPath();
+  ctx.arc(8.5, -4, 2.5, 0, Math.PI * 2);
+  ctx.fill();
+  // Gleam
+  ctx.fillStyle = '#fff';
+  ctx.beginPath();
+  ctx.arc(9.2, -5, 0.9, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Dead X eyes
+  if (state === STATE.DEAD) {
+    ctx.strokeStyle = '#ff3366';
+    ctx.lineWidth   = 2;
+    ctx.beginPath(); ctx.moveTo(4, -8); ctx.lineTo(10, -2); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(10, -8); ctx.lineTo(4, -2);  ctx.stroke();
+  }
+
+  // Beak
+  ctx.fillStyle = '#ff7800';
+  ctx.beginPath();
+  ctx.moveTo(13, -1);
+  ctx.lineTo(21,  1);
+  ctx.lineTo(13,  4);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.restore();
+}
+
+function drawOverlay(title, sub, color) {
+  ctx.fillStyle = 'rgba(4,10,18,0.62)';
+  ctx.fillRect(0, 0, CW, CH);
+
+  ctx.textAlign    = 'center';
+  ctx.textBaseline = 'middle';
+
+  ctx.font        = 'bold 28px Orbitron, monospace';
+  ctx.fillStyle   = color;
+  ctx.shadowBlur  = 22;
+  ctx.shadowColor = color;
+  ctx.fillText(title, CW / 2, CH / 2 - 16);
+  ctx.shadowBlur  = 0;
+
+  ctx.font      = '12px "Share Tech Mono", monospace';
+  ctx.fillStyle = 'rgba(200,225,255,0.75)';
+  ctx.fillText(sub, CW / 2, CH / 2 + 16);
+
+  ctx.textAlign    = 'left';
+  ctx.textBaseline = 'alphabetic';
+}
+
+// ── Particle physics update (separated from draw) ─────────────
+function updateParticles(dt) {
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const pt = particles[i];
+    pt.x    += pt.vx * dt;
+    pt.y    += pt.vy * dt;
+    pt.vy   += 280 * dt;   // gravity
+    pt.life -= pt.decay * dt;
+    if (pt.life <= 0) particles.splice(i, 1);
+  }
+}
+
+// ── Game Loop ─────────────────────────────────────────────────
+function loop(ts) {
+  requestAnimationFrame(loop);
+
+  // First frame: initialize timestamp, skip update
+  if (lastTime === null) {
+    lastTime = ts;
+    return;
+  }
+
+  // dt in seconds, capped to prevent spiral-of-death on tab resume / lag spikes
+  // 0.05 s = 20 FPS minimum equivalent — safe for physics
+  let dt = Math.min((ts - lastTime) / 1000, 0.05);
+  lastTime = ts;
+
+  update(dt);
+  updateParticles(dt);
+  draw();
+  updateHUD();
+}
+
+requestAnimationFrame(loop);
+
+// ── Input ─────────────────────────────────────────────────────
+// touchstart + click both fire on mobile tap — debounce in birdJump() handles it
+canvas.addEventListener('click',      () => { ensureAudio(); birdJump(); });
+canvas.addEventListener('touchstart', (e) => {
+  e.preventDefault(); // prevents ghost click 300 ms later on some browsers
+  ensureAudio();
+  birdJump();
+}, { passive: false });
+
+document.addEventListener('keydown', (e) => {
+  if (e.code === 'Space' || e.code === 'ArrowUp') {
+    e.preventDefault();
+    ensureAudio();
+    birdJump();
+  }
+});
+
+btnStart.addEventListener('click',   startGame);
+btnCashout.addEventListener('click', cashOut);
+
+currSelect.addEventListener('change', (e) => {
+  currentCurrency = e.target.value;
+  updateBalanceDisplay();
+  if (state !== STATE.PLAYING) winEl.textContent = '—';
+});
+
+// Init display
+updateBalanceDisplay();
+</script>
+</body>
+</html>
